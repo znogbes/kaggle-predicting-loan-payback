@@ -30,12 +30,7 @@ data_train_non_payers = data_train[filter]
 
 # TODO: SEARCH if there's a package that already does below
 
-# save description objects of numeric variables (by outcome group)
-payers_desc = data_train_payers.describe().drop('loan_paid_back', axis=1)
-non_payers_desc = data_train_non_payers.describe().drop('loan_paid_back', axis=1)
-
 # visualisation of numeric variables
-
 # define cols to loop through in plot
 numeric_cols = data_train_payers.select_dtypes(
     include=np.number).columns.drop('loan_paid_back')
@@ -91,14 +86,14 @@ for i, col in enumerate(numeric_cols):
 
     # create histograms for each group
     ax.hist(
-        data_train_payers[col], bins=50, #alpha=0.5, 
+        data_train_payers[col], bins=50,  
         color='blue',
         label='Payers', 
         histtype = 'step'
         )
         
     ax.hist(
-        data_train_non_payers[col], bins=20, #alpha=0.5, 
+        data_train_non_payers[col], bins=20, 
         color='red',
         label='Non-payers', histtype = 'step'
         )
@@ -154,8 +149,6 @@ def plot_categorical_cols(freq_table, col_name):
     plt.legend(loc='lower right', frameon = False, labels=custom_labels)
     plot = plt.show()
     return plot
-
-#plot_categorical_cols(freq_table, 'grade_subgrade')
 
 # loop over to see freq tables and plots
 categorical_cols = data_train.select_dtypes(include='object').drop(
