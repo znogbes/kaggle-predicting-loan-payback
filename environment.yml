@@ -1,4 +1,4 @@
-name: kaggle_predicting_loan_payback
+name: ml_kaggle
 channels:
   - defaults
 dependencies:
@@ -78,6 +78,7 @@ dependencies:
       - jsonschema==4.25.1
       - jsonschema-specifications==2025.9.1
       - kaggle==1.7.4.5
+      - kagglehub==0.3.13
       - keras==3.12.0
       - kiwisolver==1.4.9
       - libclang==18.1.1
