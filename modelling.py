@@ -68,7 +68,7 @@ cv_results = cross_validate(
 
 # extract coefficients from models generated in cross val
 co_eff_df = pd.DataFrame()
-co_eff_df['feature'] = list(X_train_val)
+co_eff_df['feature'] = list(X_train.columns)
 
 coefficients = []
 for model in cv_results['estimator']:
@@ -84,17 +84,23 @@ co_eff_df['co_efficient_abs'] = np.abs(co_eff_df['mean_coefficient_cv10'])
 co_eff_df.sort_values(by='co_efficient_abs', ascending=False, inplace=True)
 co_eff_df
 
-# generate classification report
-# we'll be plotting as well 
+# predictions
+predictions = cross_val_predict(
+    model,X_train_std,y_train,
+    cv=10
+)
+
+# generate classification report 
 pd.DataFrame(
     classification_report(
         y_true=y_train,
         y_pred=predictions, 
         target_names=['Non-Payer', 'Payer'],
         output_dict=True)
-        )
+        ).round(3)
 
-# model was trained on 9 folds and tested on 1
+# plot distribution of performance metrics shown in classification report
+# plus roc auc
 performance_metrics = pd.DataFrame(cv_results).drop(
     columns=['fit_time', 'score_time', 'estimator'])
 
@@ -105,12 +111,7 @@ plt.boxplot(performance_metrics, labels=performance_metrics.columns)
 plt.tight_layout()
 plt.show()
 
-# predictions and confusion matrices
-predictions = cross_val_predict(
-    model,X_train_std,y_train,
-    cv=10
-)
-
+# confusion matrix
 cm = confusion_matrix(y_true=y_train, 
                       y_pred=predictions,
                       normalize='true')
@@ -138,11 +139,10 @@ ax = roc_curve.ax_
 # plot chance
 ax.plot([0,1], [0,1], color='darkblue', linestyle=':')
 
-# this is deploying the model on test data, asusming we're happy with model performance
+# this is deploying the model on test data, assuming we're happy with model performance
 # here are the predicted probabilites of the model
 # on the standaridised, test data
-y_pred_test = model.predict(X_test_std)
-pred_probabilities = model.predict_proba(X_test_std)
+pred_probabilities = predictions
 submission_probabilities = pd.DataFrame()
 data_test = pd.read_csv('data/test.csv')
 submission_probabilities['id'] = data_test['id']

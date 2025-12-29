@@ -60,11 +60,8 @@ def one_hot_encode(data_ordinal_encoded, columns_to_encode):
 data_train_encoded = one_hot_encode(data_train_encoded, one_hot_encoding_cols)
 data_test_encoded = one_hot_encode(data_test_encoded, one_hot_encoding_cols)
 
-# data ready for modelling in in data_train_encoded
-sorted(data_train_encoded.columns)
-sorted(data_test_encoded.columns)
-
-data_train_encoded.head(10)
-data_test_encoded.head(10)
+# write data
+data_train_encoded.to_csv('./data/data_train_processed.csv', index=False)
+data_test_encoded.to_csv('./data/data_test_processed.csv', index=False)
 
 # move on to modelling
