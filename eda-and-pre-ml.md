@@ -136,7 +136,7 @@ plt.show()
     
 
 
-</summary>
+</details>
 
 ### **Numeric features**
 
@@ -449,7 +449,7 @@ def plot_categorical_cols(freq_table, col_name):
 
 </details>
 
-We can then loop through every categorical variable and use both functions. You can see what the output looks like for `employment_status ` and click on the arrow to see the results for the rest of the variables. 
+We can then loop through every categorical variable and use both functions. You can see what the output looks like for `employment_status` and click on the arrow to see the results for the rest of the variables. 
 
 <details markdown="1">
 <summary><b>Show all categorical variables</b></summary>
@@ -734,4 +734,579 @@ print(data_encoded.columns.to_list())
 data_encoded.to_csv('./data/data_processed.csv', index=False)
 ```
 
-**Next, I will compare different ML methods** and do a bit of model evaluation to propose an optimal model for predicting whether someone will pay a loan back.
+## SMOTE for class imbalance
+
+As we saw earlier, the amount of payers and non payers is quite imbalanced in the data. We will account for that imbalance in modelling by using *class weights* in models that use the original data. 
+
+Another avenue to account for class imbalance in ML is using **SMOTE** (*Synthetic Minority Oversampling Technique*). I will be using SMOTE to augment the number of non-payer data points in the data. This will result in a separate data frame for modelling that has a mix of original and synthetic data. I will be focusing on how to apply SMOTE below using `imblearn`, but you can read more about the theory behind it [here](https://www.jair.org/index.php/jair/article/view/10302).
+
+
+```python
+# import SMOTE package
+import imblearn
+from imblearn.over_sampling import SMOTE
+from sklearn.neighbors import NearestNeighbors
+```
+
+SMOTE will generate synthetic data points by choosing a real data point randomly and then finding the closest neighbours of the same class (6 points by default in `imblearn`). One of those neighbours is then selected randomly, so SMOTE has two real reference points to create a synthetic point. The new data is generated at a random distance between the two points. 
+
+<img src="https://miro.medium.com/v2/1*YVhx7PO2gck7L_9NVLC5NQ.png" height="400" width ="450">
+
+[Image Source](https://sangeethasaravanan.medium.com/understanding-smote-solving-the-imbalanced-dataset-problem-ab02bbd52b04)
+
+We'll be using the encoded data to generate a total of **521,943 observations of non-payers**. This number exceeds the total number of payers in the original data by 10%. We create more synthetic data than we will actually use to account for instances where SMOTE might create data that it's too similar to the original data.
+
+
+```python
+# separate features and labels (outcome) 
+X = data_encoded.drop('loan_paid_back', axis=1)
+y = data_encoded['loan_paid_back']
+
+# count numbers in each class
+n_non_payers = np.sum(y == 0)
+n_payers = np.sum(y == 1)
+
+# number of samples to generate to balance classes (i.e., 10% over the total number of payers)
+n_samples_to_generate = int((n_payers*1.1).round())
+```
+
+**Disclaimer:** Even though I will keep making a distinction between 'real' and synthetic data, we know from Kaggle that the initial data we used was generated synthetically. This means we're actually generating synthetic data out of synthetic data.
+
+Before we use SMOTE, we'll turn all variables in the training data to floating digits. SMOTE will then create the total number of data observations needed to balance the number of payer and non-payers. This means the data we get back is the original training data plus the synthetic data.
+
+
+```python
+# turn all train to float before SMOTE
+X = X.astype('float')
+
+# apply SMOTE
+X_smote, y_smote = SMOTE(
+    sampling_strategy={0:n_samples_to_generate, 1:n_payers}
+    ).fit_resample(X, y)
+
+# this shows us the new distribution of classes in the training set after SMOTE
+# remember we have 10% more non-payers than payers as we haven't checked for similarities 
+# between synthetic and original data points
+y_smote.value_counts()
+```
+
+
+
+
+    loan_paid_back
+    0.0    521943
+    1.0    474494
+    Name: count, dtype: int64
+
+
+
+### Re-processing after SMOTE
+
+The data returned by SMOTE is in the form of floating digits. Although expected, this means we'll need to re-process the data so variables are in the same format as in the original `data_encoded` object. You can see in the last 10 rows of the new data frame, which represent examples of synthetic data, that variables such as `credit_score` and `grade_subgrade` are no longer integers. Similarly, variables that were one-hot encoded such as `gender` and `marital_status` lost their encoding (i.e., there are values between 0 and 1 across all columns).
+
+
+```python
+# this shows why we need to do further processing
+X_smote.filter(regex='credit_score|grade_subgrade|marital_status').tail(10)
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>credit_score</th>
+      <th>grade_subgrade</th>
+      <th>marital_status_Divorced</th>
+      <th>marital_status_Married</th>
+      <th>marital_status_Single</th>
+      <th>marital_status_Widowed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>996427</th>
+      <td>679.392626</td>
+      <td>12.568590</td>
+      <td>0.392147</td>
+      <td>0.607853</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996428</th>
+      <td>643.754426</td>
+      <td>18.268355</td>
+      <td>0.000000</td>
+      <td>0.731645</td>
+      <td>0.268355</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996429</th>
+      <td>723.635048</td>
+      <td>13.090721</td>
+      <td>0.000000</td>
+      <td>0.909279</td>
+      <td>0.090721</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996430</th>
+      <td>644.942323</td>
+      <td>16.971162</td>
+      <td>0.000000</td>
+      <td>0.676279</td>
+      <td>0.323721</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996431</th>
+      <td>699.541211</td>
+      <td>14.951032</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996432</th>
+      <td>692.996202</td>
+      <td>12.996202</td>
+      <td>0.998101</td>
+      <td>0.001899</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996433</th>
+      <td>623.517978</td>
+      <td>21.562367</td>
+      <td>0.000000</td>
+      <td>0.359408</td>
+      <td>0.640592</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996434</th>
+      <td>623.147296</td>
+      <td>17.770541</td>
+      <td>0.000000</td>
+      <td>0.409820</td>
+      <td>0.590180</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996435</th>
+      <td>674.313383</td>
+      <td>14.358216</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>996436</th>
+      <td>700.299971</td>
+      <td>11.194738</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+We will identify the original variable types from the original data and re-process accordingly.
+
+
+```python
+# identify all data types
+X = data_encoded.drop('loan_paid_back', axis=1)
+print(X.dtypes.unique())
+
+# create objects containing variable names by type
+col_names = X.columns
+type(col_names)
+# create filters based on type
+mask_float = X.dtypes == 'float64'
+# get names of float columns
+float_cols = col_names[mask_float]
+# repeat for integer and boolean 
+mask_int = X.dtypes == 'int64'
+int_cols = col_names[mask_int]
+mask_bool = X.dtypes == 'bool'
+bool_cols = col_names[mask_bool]
+```
+
+    [dtype('float64') dtype('int64') dtype('bool')]
+    
+
+Then we create a function to replicate one-hot encoding. This function will take a group of variables that share a common name and it will examine every row to find which column was assigned the highest value by SMOTE. The value for that column will be replaced with a 1 and the rest will be replaced with zeros. This is done to reflect that, for example, a person in the data set cannot be both married AND single.
+
+
+```python
+# function to perform one-hot encoding on boolean columns
+
+def cast_one_hot_encoding(df, col_pattern):
+    """
+    transforms selected columns into one-hot encoded columns 
+    by setting 1 for the highest value and 0 for the rest.
+    """
+    # Filter columns that match col_pattern
+    filtered_cols = [col for col in df.columns if col_pattern in col]
+    
+    print(f'These variables were identified based on the pattern provided:\n {filtered_cols} \n')
+    
+    # Find the index of the maximum value for each row across the filtered columns
+    max_idx = df[filtered_cols].idxmax(axis=1)
+
+    # create an array of zeros with the same shape as the filtered columns
+    zeros_array = np.zeros_like(df[filtered_cols], dtype=int)
+    
+    # map column names by assigning indices
+    col_index_map = {col: idx for idx, col in enumerate(filtered_cols)}
+    max_idx_int = max_idx.map(col_index_map)
+
+    # replace one of the zeros in the array with a 1 at the position of the maximum value
+    zeros_array[np.arange(len(df)), max_idx_int] = 1
+    # this is now the encoded array
+    encoded_array = zeros_array
+
+    # replace the original columns with one-hot encoded values
+    df[filtered_cols] = encoded_array
+    
+    # turn boolean
+    df[filtered_cols] =  df[filtered_cols].astype('bool')
+
+    return df
+
+patterns = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose']
+
+# now loop through boolean columns and apply the one-hot encoding function
+for pattern in patterns:
+    X_smote_processed = cast_one_hot_encoding(X_smote, pattern)  
+```
+
+    These variables were identified based on the pattern provided:
+     ['gender_Female', 'gender_Male', 'gender_Other'] 
+    
+    These variables were identified based on the pattern provided:
+     ['marital_status_Divorced', 'marital_status_Married', 'marital_status_Single', 'marital_status_Widowed'] 
+    
+    These variables were identified based on the pattern provided:
+     ["education_level_Bachelor's", 'education_level_High School', "education_level_Master's", 'education_level_Other', 'education_level_PhD'] 
+    
+    These variables were identified based on the pattern provided:
+     ['employment_status_Employed', 'employment_status_Retired', 'employment_status_Self-employed', 'employment_status_Student', 'employment_status_Unemployed'] 
+    
+    These variables were identified based on the pattern provided:
+     ['loan_purpose_Business', 'loan_purpose_Car', 'loan_purpose_Debt consolidation', 'loan_purpose_Education', 'loan_purpose_Home', 'loan_purpose_Medical', 'loan_purpose_Other', 'loan_purpose_Vacation'] 
+    
+    
+
+After saving the results of one-hot encoding in a new data object, you can loop again through the remaining columns to restore floating and integer columns. Notice the new format of the synthetic data.
+
+
+```python
+# use another loop to set types to float and integer columns 
+for col in col_names:
+    if col in float_cols:
+        # keep float type as is but round to 2 decimals to as in real data
+        X_smote_processed[col] = X_smote_processed[col].round(2).astype(float)
+    elif col in int_cols:
+        # round integers
+        X_smote_processed[col] = X_smote_processed[col].round()
+
+# have a look at the processed data (just a couple of cols to check the changes)
+X_smote_processed.filter(regex='credit_score|grade_subgrade|marital_status').tail(10)
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>credit_score</th>
+      <th>grade_subgrade</th>
+      <th>marital_status_Divorced</th>
+      <th>marital_status_Married</th>
+      <th>marital_status_Single</th>
+      <th>marital_status_Widowed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>996427</th>
+      <td>698.0</td>
+      <td>10.0</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996428</th>
+      <td>651.0</td>
+      <td>17.0</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996429</th>
+      <td>612.0</td>
+      <td>16.0</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996430</th>
+      <td>577.0</td>
+      <td>27.0</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996431</th>
+      <td>667.0</td>
+      <td>17.0</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996432</th>
+      <td>740.0</td>
+      <td>8.0</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996433</th>
+      <td>555.0</td>
+      <td>27.0</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996434</th>
+      <td>688.0</td>
+      <td>15.0</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>996435</th>
+      <td>690.0</td>
+      <td>15.0</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>996436</th>
+      <td>646.0</td>
+      <td>14.0</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+### De-duplicating the synthetic data
+
+We will be checking the synthetic data for potential duplication and close similarity to real data. SMOTE returned the original data and topped it up by adding the synthetic data points, so we can separate the real data from the synthetic data like so:
+
+
+```python
+# separate original from synthetic data
+# use copy() to avoid SettingWithCopyWarning
+X_synthetic = X_smote_processed[len(X):].copy()
+y_synthetic = y_smote[len(y):].copy()
+
+# this tells us the amount of synthetic data generated for each class
+# reminder: we did not generate synthetic data for the majority class (payers) 
+y_synthetic.value_counts()
+```
+
+
+
+
+    loan_paid_back
+    0.0    402443
+    Name: count, dtype: int64
+
+
+
+To de-duplicate the synthetic data, we standardise it and compare it to the standardised version of the original data. I'll explain why standardsisation is needed for modelling in the next article, but for now it will suffice to note that after standardisation, the mean of our numeric data will be 0 and the standard deviation will be 1. You can mak a function to standardise data like the one below and re-use it for modelling.
+
+
+```python
+from sklearn.preprocessing import StandardScaler
+
+# function to standardise data (mean = 0, stdev = 1)
+def standardise_data(X_train, X_test):
+    # intialise scaling object 
+    sc = StandardScaler()
+    # set on the training set
+    sc.fit(X_train)
+    # apply scaler
+    train_std = sc.fit_transform(X_train)
+    test_std = sc.fit_transform(X_test)
+    return train_std, test_std
+
+X_real_std, X_synthetic_std = standardise_data(X, X_synthetic)
+```
+
+The actual **metric used for de-duplication** will be the distance from the synthetic data point to the **nearest neighbour** in the real data. The block below shows how to calculate it.
+
+
+```python
+# below takes a couple of minutes to run
+# find nearest neighbour in the real data for each synthetic data point
+nn = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(X_real_std)
+dists, idxs = nn.kneighbors(X_synthetic_std)
+
+
+# store the distances and indices of nearest neighbours
+X_synthetic['nearest_neighbour_distance'] = list(dists.flatten())
+X_synthetic['nearest_neighbour_index_real_data'] = list(idxs.flatten())
+```
+
+Now that we have the nearest neighbour distances stored in the synthetic data, we can check what proportion is virtually identical to the real data.
+
+
+```python
+identical = X_synthetic['nearest_neighbour_distance'] < 0.001
+
+print (f"Proportion of data points identical to real data points =",
+       f"{identical.mean():0.3f}")
+```
+
+    Proportion of data points identical to real data points = 0.000
+    
+
+Since none of the synthetic data was identical to the real data, we'll proceed to make a data frame that has all the synthetic features and labels. 
+
+
+```python
+# make data frame of all synthetic data (features and labels)
+data_synthetic = pd.concat([X_synthetic, y_synthetic], axis=1)
+```
+
+You can sort the synthetic data by furthest neighbouring distance from the real data.
+
+
+```python
+# sort by furthest distance to nearest neighbour in real data
+data_synthetic.sort_values(by='nearest_neighbour_distance', 
+                                 ascending=False, inplace=True)
+data_synthetic['nearest_neighbour_distance'].head()
+```
+
+
+
+
+    897188    45.096394
+    599661    45.089614
+    621848    45.087805
+    954039    45.081490
+    745856    45.079437
+    Name: nearest_neighbour_distance, dtype: float64
+
+
+
+Since we have excess synthetic data, we can **remove the 10% that was most similar to the real data.** We can also create a column in the synthetic data to identify it as such.
+
+
+```python
+# this is the number of synthetic, non-payer data points needed to balance the classes
+n_remain = n_payers-n_non_payers
+
+# remove synthetic data points based on proximity to real data points
+data_train_synthetic_final = data_synthetic.head(n_remain).copy()
+data_train_synthetic_final['loan_paid_back'].value_counts()
+# create synthetic data flag
+data_train_synthetic_final['is_synthetic'] = True
+```
+
+### Save synthetic data for modelling
+
+Now that we have cleansed synthetic data, we can add it back to the original train data to create a data set where both the number of payers and non-payers is the same. You can save that data locally to use in future models.
+
+
+```python
+# start by bringing together the original training data
+data_training_after_smote = data_encoded.copy()
+# add column to identify synthetic vs real data
+# set to false for all original data points
+data_training_after_smote['is_synthetic'] = False
+# add synthetic data to original training data
+data_training_after_smote = pd.concat([data_training_after_smote, data_train_synthetic_final], axis=0)
+print(data_training_after_smote['loan_paid_back'].value_counts())
+
+# write to csv for use in modelling
+data_training_after_smote.to_csv('./data/data_processed_after_smote.csv', index=False)
+```
+
+    loan_paid_back
+    1.0    474494
+    0.0    474494
+    Name: count, dtype: int64
+    
+
+**Next, I will fit a logsitic regression** and do a bit of model evaluation to obtain baseline measures that can later be compared against other ML methods. I will be experimenting fitting models with the original and the augmented data just created.
