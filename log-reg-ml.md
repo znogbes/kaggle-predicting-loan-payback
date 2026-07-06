@@ -83,7 +83,7 @@ features
 
 
 
-</summary>
+</details>
 
 ## Pre-modelling steps
 
@@ -607,6 +607,236 @@ plt.show()
 
     
 ![png](log-reg-ml_files/log-reg-ml_26_0.png)
+    
+
+
+## Repeat with SMOTE data
+
+Remember the synthethic data generated during EDA? We will bring it here to repeat logistic regression fitting and evaluation. The main change to note between this new run and the previous model is that we won't be requesting class-weighted performance metrics. SMOTE takes care of class imbalance by evening out the numbers of payers and non-payers, which we achieved by generating synthetic non-payers. This also means that the re-run below uses a larger data set.
+
+As you will see below, the model performance improvements achieved by using SMOTE-augmented data are small. In comparison with the first logistic regression, the confusion matrix from the second regression has slightly smaller proportions of correct predictions. However, the proportion of wrongly-predicted non-payers could still be a concern in business contexts, which should encourage us to explore other ML methods to achieve smaller false positive rate without overfitting.    
+
+<details markdown="1">
+<summary><b>SMOTE data splitting and standardisation</b></summary>
+
+
+```python
+data_encoded_smote = pd.read_csv('./data/data_processed_after_smote.csv')
+data_augmented = data_encoded_smote.copy()
+data_augmented = data_augmented.drop(columns=['is_synthetic', 
+                                        'nearest_neighbour_distance', 
+                                        'nearest_neighbour_index_real_data'])
+# separate features and labels (outcome) 
+X = data_augmented.drop('loan_paid_back', axis=1)
+y = data_augmented['loan_paid_back']
+
+# data splits: training, validation, and testing 
+# (80% for training/validation, 20% for testing)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, 
+                                                    random_state=17)
+
+# standardise data
+X_train_std, X_test_std = standardise_data(X_train, X_test)
+```
+
+</details>
+
+<details markdown="1">
+<summary><b>Logistic regression coefficients</b></summary>
+
+
+```python
+# choose model
+model = LogisticRegression()
+
+# defaulted to stratified cross validation (cv) - i.e., percentage of sample 
+# in each label is kept consistent as possible
+cv_results = cross_validate(
+    model, X_train_std, y_train,
+    # performance metrics to calculate
+    scoring=['accuracy', 'precision', 'recall', 'f1'],
+    n_jobs=-1,
+    # number of folds
+    cv=10,
+    # return trained models for each fold
+    return_estimator=True # increases running time a little
+    )
+
+# extract coefficients from models generated in cross val
+co_eff_df = pd.DataFrame()
+co_eff_df['feature'] = list(X_train.columns)
+
+coefficients = []
+for model in cv_results['estimator']:
+    # append array of coefficients
+    coefficients.append(model.coef_[0])
+
+# calculate mean coefficient for every feature
+mean_coefficients = np.mean(coefficients, axis = 0)
+# save into coeff df
+co_eff_df['mean_coefficient_cv10'] = mean_coefficients
+# sort by absolute value (derived from mean coeff to understand magnitude)
+co_eff_df['co_efficient_abs'] = np.abs(co_eff_df['mean_coefficient_cv10'])
+co_eff_df.sort_values(by='co_efficient_abs', ascending=False, inplace=True)
+# present 10 top features by absolute coefficient value
+co_eff_df[0:10]
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>feature</th>
+      <th>mean_coefficient_cv10</th>
+      <th>co_efficient_abs</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>22</th>
+      <td>employment_status_Unemployed</td>
+      <td>-1.411520</td>
+      <td>1.411520</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>debt_to_income_ratio</td>
+      <td>-1.076141</td>
+      <td>1.076141</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>employment_status_Employed</td>
+      <td>0.974687</td>
+      <td>0.974687</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>credit_score</td>
+      <td>0.896272</td>
+      <td>0.896272</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>employment_status_Retired</td>
+      <td>0.750655</td>
+      <td>0.750655</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>employment_status_Self-employed</td>
+      <td>0.440397</td>
+      <td>0.440397</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>employment_status_Student</td>
+      <td>-0.320039</td>
+      <td>0.320039</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>grade_subgrade</td>
+      <td>0.109710</td>
+      <td>0.109710</td>
+    </tr>
+    <tr>
+      <th>25</th>
+      <td>loan_purpose_Debt consolidation</td>
+      <td>0.073096</td>
+      <td>0.073096</td>
+    </tr>
+    <tr>
+      <th>26</th>
+      <td>loan_purpose_Education</td>
+      <td>-0.059895</td>
+      <td>0.059895</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+</details>
+
+### Confusion matrix
+
+
+```python
+ConfusionMatrixDisplay.from_estimator(model, X_train_std, y_train,
+                                      display_labels=['Non-payer','Payer'],
+                                      cmap='PuBuGn',
+                                      normalize='true'
+                                      )
+plt.title('Normalised confusion matrix:\n10-fold cross validation & SMOTE')
+plt.show()
+```
+
+
+    
+![png](log-reg-ml_files/log-reg-ml_32_0.png)
+    
+
+
+### Performance Metrics
+
+
+```python
+# plot distribution of performance metrics shown in classification report
+performance_metrics = pd.DataFrame(cv_results).drop(
+    columns=['fit_time', 'score_time', 'estimator'])
+
+# plot metrics obtained via stratified kfolds
+# the test_ metrics refer to the the 10th fold 
+plt.subplots(figsize=(8,5))
+plt.boxplot(performance_metrics, labels=performance_metrics.columns)
+#plt.ylim(0.85, 0.9)
+plt.ylabel('Score')
+plt.tight_layout()
+plt.show()
+```
+
+
+    
+![png](log-reg-ml_files/log-reg-ml_34_0.png)
+    
+
+
+### ROC curve
+
+
+```python
+# receiver operator characteristic curve
+# plot specificity (false positive rate) vs recall (aka sensitivity; true positive rate) 
+roc_curve = RocCurveDisplay.from_estimator(model, X_train_std, y_train, pos_label=1)
+fig = roc_curve.figure_
+ax = roc_curve.ax_
+# plot chance
+ax.plot([0,1], [0,1], color='darkblue', linestyle=':')
+plt.show()
+```
+
+
+    
+![png](log-reg-ml_files/log-reg-ml_36_0.png)
     
 
 
